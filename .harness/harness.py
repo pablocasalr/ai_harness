@@ -1153,23 +1153,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Codex workflow harness")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    init = sub.add_parser("init")
+    init = sub.add_parser("init", help="initialize harness DB and config in current directory")
     init.add_argument("--force-config", action="store_true")
     init.set_defaults(func=command_init)
 
-    detect = sub.add_parser("detect")
+    detect = sub.add_parser("detect", help="auto-detect project language and test commands")
     detect.set_defaults(func=command_detect)
 
-    install = sub.add_parser("install")
+    install = sub.add_parser("install", help="install harness into another project directory")
     install.add_argument("--target", required=True)
     install.add_argument("--force", action="store_true")
     install.add_argument("--create", action="store_true")
     install.set_defaults(func=command_install)
 
-    spec = sub.add_parser("spec")
+    spec = sub.add_parser("spec", help="manage specs (requirements)")
     spec_sub = spec.add_subparsers(dest="spec_command", required=True)
 
-    spec_new = spec_sub.add_parser("new")
+    spec_new = spec_sub.add_parser("new", help="create a new draft spec")
     spec_new.add_argument("title")
     spec_new.add_argument("--goal")
     spec_new.add_argument("--scope")
@@ -1180,14 +1180,14 @@ def build_parser() -> argparse.ArgumentParser:
     spec_new.add_argument("--risk", default="medium")
     spec_new.set_defaults(func=command_spec_new)
 
-    spec_list = spec_sub.add_parser("list")
+    spec_list = spec_sub.add_parser("list", help="list all specs")
     spec_list.set_defaults(func=command_spec_list)
 
-    spec_show = spec_sub.add_parser("show")
+    spec_show = spec_sub.add_parser("show", help="show full details of a spec (defaults to active)")
     spec_show.add_argument("id", nargs="?")
     spec_show.set_defaults(func=command_spec_show)
 
-    spec_set = spec_sub.add_parser("set")
+    spec_set = spec_sub.add_parser("set", help="update fields on a spec")
     spec_set.add_argument("id", nargs="?")
     spec_set.add_argument("--title")
     spec_set.add_argument("--goal")
@@ -1200,36 +1200,36 @@ def build_parser() -> argparse.ArgumentParser:
     spec_set.add_argument("--force", action="store_true")
     spec_set.set_defaults(func=command_spec_set)
 
-    spec_lock = spec_sub.add_parser("lock")
+    spec_lock = spec_sub.add_parser("lock", help="lock a spec (freezes requirements)")
     spec_lock.add_argument("id", nargs="?")
     spec_lock.add_argument("--force", action="store_true")
     spec_lock.set_defaults(func=command_spec_lock)
 
-    task = sub.add_parser("task")
+    task = sub.add_parser("task", help="manage implementation tasks")
     task_sub = task.add_subparsers(dest="task_command", required=True)
 
-    task_active = task_sub.add_parser("active")
+    task_active = task_sub.add_parser("active", help="show the current active task")
     task_active.set_defaults(func=command_task_active)
 
-    task_attempt = task_sub.add_parser("attempt")
+    task_attempt = task_sub.add_parser("attempt", help="start a new implementation attempt")
     task_attempt.set_defaults(func=command_task_attempt)
 
-    task_list = task_sub.add_parser("list")
+    task_list = task_sub.add_parser("list", help="list all tasks")
     task_list.set_defaults(func=command_task_list)
 
-    context = sub.add_parser("context")
+    context = sub.add_parser("context", help="show active spec + relevant memory for a query")
     context.add_argument("query")
     context.add_argument("--include-inactive", action="store_true")
     context.set_defaults(func=command_context)
 
-    test = sub.add_parser("test")
+    test = sub.add_parser("test", help="plan or run tests")
     test_sub = test.add_subparsers(dest="test_command", required=True)
 
-    test_plan = test_sub.add_parser("plan")
+    test_plan = test_sub.add_parser("plan", help="show test commands for current spec")
     test_plan.add_argument("--pattern")
     test_plan.set_defaults(func=command_test_plan)
 
-    test_run = test_sub.add_parser("run")
+    test_run = test_sub.add_parser("run", help="execute tests and record results")
     mode = test_run.add_mutually_exclusive_group()
     mode.add_argument("--targeted", action="store_true", default=True)
     mode.add_argument("--full", action="store_true")
@@ -1237,13 +1237,13 @@ def build_parser() -> argparse.ArgumentParser:
     test_run.add_argument("--dry-run", action="store_true")
     test_run.set_defaults(func=command_test_run)
 
-    review = sub.add_parser("review")
+    review = sub.add_parser("review", help="run pre-merge checks (spec locked, tests passed, diff size)")
     review.set_defaults(func=command_review)
 
-    memory = sub.add_parser("memory")
+    memory = sub.add_parser("memory", help="manage project memory (decisions, conventions, pitfalls)")
     mem_sub = memory.add_subparsers(dest="memory_command", required=True)
 
-    mem_add = mem_sub.add_parser("add")
+    mem_add = mem_sub.add_parser("add", help="add a memory entry directly")
     mem_add.add_argument("--kind", required=True)
     mem_add.add_argument("--area", default="general")
     mem_add.add_argument("--summary", required=True)
@@ -1255,26 +1255,26 @@ def build_parser() -> argparse.ArgumentParser:
     mem_add.add_argument("--active", choices=["yes", "no"], default="yes")
     mem_add.set_defaults(func=command_memory_add)
 
-    mem_search = mem_sub.add_parser("search")
+    mem_search = mem_sub.add_parser("search", help="full-text search memory")
     mem_search.add_argument("query")
     mem_search.add_argument("--include-inactive", action="store_true")
     mem_search.add_argument("--limit", type=int, default=8)
     mem_search.set_defaults(func=command_memory_search)
 
-    mem_list = mem_sub.add_parser("list")
+    mem_list = mem_sub.add_parser("list", help="list all memory entries")
     mem_list.add_argument("--all", action="store_true")
     mem_list.set_defaults(func=command_memory_list)
 
-    mem_active = mem_sub.add_parser("set-active")
+    mem_active = mem_sub.add_parser("set-active", help="enable or disable a memory entry")
     mem_active.add_argument("id")
     mem_active.add_argument("active", choices=["yes", "no"])
     mem_active.set_defaults(func=command_memory_set_active)
 
-    mem_deprecate = mem_sub.add_parser("deprecate")
+    mem_deprecate = mem_sub.add_parser("deprecate", help="mark a memory entry as deprecated")
     mem_deprecate.add_argument("id")
     mem_deprecate.set_defaults(func=command_memory_deprecate)
 
-    mem_propose = mem_sub.add_parser("propose")
+    mem_propose = mem_sub.add_parser("propose", help="propose a memory candidate for later review")
     mem_propose.add_argument("--kind", required=True)
     mem_propose.add_argument("--area", default="general")
     mem_propose.add_argument("--summary", required=True)
@@ -1285,20 +1285,20 @@ def build_parser() -> argparse.ArgumentParser:
     mem_propose.add_argument("--active", choices=["yes", "no"], default="yes")
     mem_propose.set_defaults(func=command_memory_propose)
 
-    mem_candidates = mem_sub.add_parser("candidates")
+    mem_candidates = mem_sub.add_parser("candidates", help="list pending memory candidates")
     mem_candidates.add_argument("--all", action="store_true")
     mem_candidates.set_defaults(func=command_memory_candidates)
 
-    mem_accept = mem_sub.add_parser("accept")
+    mem_accept = mem_sub.add_parser("accept", help="accept a memory candidate into active memory")
     mem_accept.add_argument("id")
     mem_accept.add_argument("--active", choices=["yes", "no"])
     mem_accept.set_defaults(func=command_memory_accept)
 
-    mem_reject = mem_sub.add_parser("reject")
+    mem_reject = mem_sub.add_parser("reject", help="reject a memory candidate")
     mem_reject.add_argument("id")
     mem_reject.set_defaults(func=command_memory_reject)
 
-    close = sub.add_parser("close")
+    close = sub.add_parser("close", help="close the active spec/task after user review")
     close.add_argument("--outcome")
     close.add_argument("--force", action="store_true")
     close.set_defaults(func=command_close)
