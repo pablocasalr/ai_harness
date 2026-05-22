@@ -966,11 +966,21 @@ def command_close(args: argparse.Namespace) -> None:
         sys.exit("No active spec/task.")
 
     if args.register_hash:
+        if not args.spec_id:
+            sys.exit("--register-hash requires --spec-id <spec_id>")
         commit_hash = args.register_hash.strip()
-        conn.execute("UPDATE specs SET commit_hash = ? WHERE id = ?", (commit_hash, spec["id"]))
-        conn.execute("UPDATE tasks SET commit_hash = ? WHERE id = ?", (commit_hash, task["id"]))
+        target_spec = conn.execute("SELECT * FROM specs WHERE id = ?", (args.spec_id,)).fetchone()
+        if not target_spec:
+            sys.exit(f"Spec not found: {args.spec_id}")
+        target_task = conn.execute(
+            "SELECT * FROM tasks WHERE spec_id = ? ORDER BY updated_at DESC LIMIT 1",
+            (target_spec["id"],),
+        ).fetchone()
+        conn.execute("UPDATE specs SET commit_hash = ? WHERE id = ?", (commit_hash, target_spec["id"]))
+        if target_task:
+            conn.execute("UPDATE tasks SET commit_hash = ? WHERE id = ?", (commit_hash, target_task["id"]))
         conn.commit()
-        print(f"Registered commit {commit_hash[:8]} for spec {spec['id']}.")
+        print(f"Registered commit {commit_hash[:8]} for spec {target_spec['id']}.")
         return
 
     if not args.force and spec["status"] != "locked":
@@ -1146,6 +1156,7 @@ def build_parser() -> argparse.ArgumentParser:
     close.add_argument("--force", action="store_true")
     close.add_argument("--type", metavar="TYPE", help="override commit type (feat, fix, refactor, docs, test, chore)")
     close.add_argument("--register-hash", metavar="HASH", help="register a commit hash against the closed spec/task")
+    close.add_argument("--spec-id", metavar="ID", help="spec to target with --register-hash (defaults to most recently closed)")
     close.set_defaults(func=command_close)
 
     return parser
