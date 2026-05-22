@@ -17,11 +17,14 @@ It provides:
 python harness-admin.py setup
 ```
 
-Adds `bin/` to your user PATH and initializes the local harness DB. After opening a new terminal, `harness-admin` is available globally.
+Adds `bin/` to your user PATH and initializes the local harness DB. After opening a new terminal, both `harness-admin` and `harness` are available globally.
+
+- `harness-admin` — manages installations (install, upgrade)
+- `harness` — project commands; auto-resolves to `.harness/harness.py` in the current directory
 
 ## Admin commands (`harness-admin`)
 
-`harness-admin.py` lives in this repo and is never copied to projects. It manages installations.
+`harness-admin.py` lives in this repo and is never copied to projects.
 
 ```powershell
 # install harness into another project
@@ -37,7 +40,6 @@ harness-admin upgrade --scan C:\path\one C:\path\two
 - `.harness/harness.py`
 - `.harness/config.yaml`
 - `.harness/BEST_PRACTICES.md`
-- `.harness/bin/harness.ps1` / `harness.cmd`
 - `AGENTS.md` (appended if already exists)
 - `README.md` (copied as `README.harness.md` if README already exists)
 
@@ -45,7 +47,7 @@ harness-admin upgrade --scan C:\path\one C:\path\two
 
 ## Project commands (`harness`)
 
-Run these from within an installed project. If `.harness/bin` is in PATH, use `harness`; otherwise `python .harness/harness.py`.
+Run from within any installed project directory. `harness` resolves to that project's `.harness/harness.py` automatically.
 
 ```powershell
 harness spec new "add email uniqueness validation"
@@ -119,9 +121,9 @@ Bad memory:
 Memory should normally be proposed at close, then accepted or rejected by the user:
 
 ```powershell
-python .harness/harness.py memory candidates
-python .harness/harness.py memory accept <candidate_id> --active yes
-python .harness/harness.py memory reject <candidate_id>
+harness memory candidates
+harness memory accept <candidate_id> --active yes
+harness memory reject <candidate_id>
 ```
 
 ## Search
@@ -131,6 +133,6 @@ The harness uses SQLite FTS, a local full-text index. It searches indexed words 
 Use tags and area names consistently so text search stays reliable:
 
 ```powershell
-python .harness/harness.py memory search "auth login tests"
-python .harness/harness.py context "billing webhook retry"
+harness memory search "auth login tests"
+harness context "billing webhook retry"
 ```
