@@ -275,57 +275,73 @@ def active_task(conn: sqlite3.Connection) -> sqlite3.Row | None:
 
 def detect_project() -> dict[str, Any]:
     files = {p.name for p in ROOT.iterdir() if p.is_file()}
-    result: dict[str, Any] = {"language": "unknown", "test": {"targeted": [], "full": []}, "lint": [], "build": []}
+    languages: list[str] = []
+    full_cmds: list[str] = []
+    targeted_cmds: list[str] = []
+    lint_cmds: list[str] = []
+    build_cmds: list[str] = []
 
     if (ROOT / "artisan").exists():
-        result["language"] = "php-laravel"
-        result["test"]["full"] = ["php artisan test"]
-        result["test"]["targeted"] = ["php artisan test --filter={pattern}"]
-    elif "package.json" in files:
-        result["language"] = "node"
+        languages.append("php-laravel")
+        full_cmds.append("php artisan test")
+        targeted_cmds.append("php artisan test --filter={pattern}")
+    elif "composer.json" in files:
+        languages.append("php")
+        full_cmds.append("vendor/bin/phpunit")
+        targeted_cmds.append("vendor/bin/phpunit --filter {pattern}")
+
+    if "package.json" in files:
+        languages.append("node")
         try:
             package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
             scripts = package.get("scripts", {})
         except Exception:
             scripts = {}
         if "test" in scripts:
-            result["test"]["full"] = ["npm test"]
-            result["test"]["targeted"] = ["npm test -- {pattern}"]
+            full_cmds.append("npm test")
+            targeted_cmds.append("npm test -- {pattern}")
         if "lint" in scripts:
-            result["lint"] = ["npm run lint"]
+            lint_cmds.append("npm run lint")
         if "build" in scripts:
-            result["build"] = ["npm run build"]
-    elif "pyproject.toml" in files or "pytest.ini" in files or "requirements.txt" in files:
-        result["language"] = "python"
-        result["test"]["full"] = ["pytest"]
-        result["test"]["targeted"] = ['pytest -k "{pattern}"']
-        result["lint"] = ["ruff check ."]
-    elif "composer.json" in files:
-        result["language"] = "php"
-        result["test"]["full"] = ["vendor/bin/phpunit"]
-        result["test"]["targeted"] = ["vendor/bin/phpunit --filter {pattern}"]
-    elif "go.mod" in files:
-        result["language"] = "go"
-        result["test"]["full"] = ["go test ./..."]
-        result["test"]["targeted"] = ["go test ./... -run {pattern}"]
-    elif "Cargo.toml" in files:
-        result["language"] = "rust"
-        result["test"]["full"] = ["cargo test"]
-        result["test"]["targeted"] = ["cargo test {pattern}"]
-    elif any(p.suffix == ".sln" or p.suffix == ".csproj" for p in ROOT.iterdir() if p.is_file()):
-        result["language"] = "dotnet"
-        result["test"]["full"] = ["dotnet test"]
-        result["test"]["targeted"] = ['dotnet test --filter "{pattern}"']
-    elif "pom.xml" in files:
-        result["language"] = "java-maven"
-        result["test"]["full"] = ["mvn test"]
-        result["test"]["targeted"] = ["mvn -Dtest={pattern} test"]
-    elif "build.gradle" in files or "build.gradle.kts" in files:
-        result["language"] = "java-gradle"
-        result["test"]["full"] = ["gradle test"]
-        result["test"]["targeted"] = ["gradle test --tests {pattern}"]
+            build_cmds.append("npm run build")
 
-    return result
+    if "pyproject.toml" in files or "pytest.ini" in files or "requirements.txt" in files:
+        languages.append("python")
+        full_cmds.append("pytest")
+        targeted_cmds.append('pytest -k "{pattern}"')
+        lint_cmds.append("ruff check .")
+
+    if "go.mod" in files:
+        languages.append("go")
+        full_cmds.append("go test ./...")
+        targeted_cmds.append("go test ./... -run {pattern}")
+
+    if "Cargo.toml" in files:
+        languages.append("rust")
+        full_cmds.append("cargo test")
+        targeted_cmds.append("cargo test {pattern}")
+
+    if any(p.suffix in (".sln", ".csproj") for p in ROOT.iterdir() if p.is_file()):
+        languages.append("dotnet")
+        full_cmds.append("dotnet test")
+        targeted_cmds.append('dotnet test --filter "{pattern}"')
+
+    if "pom.xml" in files:
+        languages.append("java-maven")
+        full_cmds.append("mvn test")
+        targeted_cmds.append("mvn -Dtest={pattern} test")
+
+    if "build.gradle" in files or "build.gradle.kts" in files:
+        languages.append("java-gradle")
+        full_cmds.append("gradle test")
+        targeted_cmds.append("gradle test --tests {pattern}")
+
+    return {
+        "language": "+".join(languages) if languages else "unknown",
+        "test": {"full": full_cmds, "targeted": targeted_cmds},
+        "lint": lint_cmds,
+        "build": build_cmds,
+    }
 
 
 def configured_test_commands(config: dict[str, Any], mode: str, pattern: str) -> list[str]:
