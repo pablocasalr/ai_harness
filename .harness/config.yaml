@@ -1,0 +1,39 @@
+{
+  "project": {
+    "name": "Harness",
+    "language": "auto"
+  },
+  "workflow": {
+    "max_attempts": 2,
+    "require_locked_spec": true,
+    "require_tests_before_ready": true,
+    "allow_spec_change_during_implementation": false,
+    "stop_on_scope_violation": true,
+    "stop_on_environment_failure": true
+  },
+  "commands": {
+    "install": [],
+    "test": {
+      "targeted": [],
+      "full": []
+    },
+    "lint": [],
+    "build": []
+  },
+  "review": {
+    "max_diff_lines_warn": 800,
+    "require_tests_for_code_changes": true
+  },
+  "memory": {
+    "default_active": true,
+    "max_context_results": 8,
+    "allowed_kinds": [
+      "command",
+      "decision",
+      "pitfall",
+      "convention",
+      "architecture",
+      "testing"
+    ]
+  }
+}
