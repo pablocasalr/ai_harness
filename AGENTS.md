@@ -99,6 +99,8 @@ Valid memory kinds: `command`, `decision`, `pitfall`, `convention`, `architectur
 
 ## Review Contract
 
+After running `harness review`, read the **Spec Self-check** section printed at the end. Confirm in chat that every acceptance criterion is satisfied before reporting the work as ready. Do not mark ready if any criterion is unverified.
+
 Before marking work ready for user review, confirm:
 
 - Spec is locked.

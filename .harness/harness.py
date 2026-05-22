@@ -793,6 +793,15 @@ def command_review(_: argparse.Namespace) -> None:
             print(f"- {finding}")
     else:
         print("- Contract checks passed. Ready for user review.")
+    print()
+    print("## Spec Self-check")
+    print("Review your implementation against each field below before reporting ready.")
+    print(f"goal: {spec['goal'] or '(not set)'}")
+    print(f"scope: {spec['scope'] or '(not set)'}")
+    print(f"out_of_scope: {spec['out_of_scope'] or '(not set)'}")
+    print(f"acceptance_criteria: {spec['acceptance_criteria'] or '(not set)'}")
+    print()
+    print("Confirm in chat that every acceptance criterion is satisfied before marking ready.")
 
 
 def command_memory_add(args: argparse.Namespace) -> None:
