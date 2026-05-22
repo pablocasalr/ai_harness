@@ -429,10 +429,20 @@ def command_spec_new(args: argparse.Namespace) -> None:
     print("Refine goal/scope/acceptance/test strategy, then lock only after user approval.")
 
 
-def command_spec_list(_: argparse.Namespace) -> None:
+def command_spec_list(args: argparse.Namespace) -> None:
     conn = connect()
+    conditions: list[str] = []
+    params: list[object] = []
+    if args.status:
+        conditions.append("status = ?")
+        params.append(args.status)
+    if args.area:
+        conditions.append("area = ?")
+        params.append(args.area)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     rows = conn.execute(
-        "SELECT id, title, area, status, active, updated_at FROM specs ORDER BY updated_at DESC"
+        f"SELECT id, title, area, status, active, updated_at FROM specs {where} ORDER BY updated_at DESC",
+        params,
     ).fetchall()
     print_rows(rows, ["id", "title", "area", "status", "active", "updated_at"])
 
@@ -552,10 +562,20 @@ def command_task_attempt(_: argparse.Namespace) -> None:
     print(f"Started implementation attempt {task['attempts'] + 1}/{max_attempts}.")
 
 
-def command_task_list(_: argparse.Namespace) -> None:
+def command_task_list(args: argparse.Namespace) -> None:
     conn = connect()
+    conditions: list[str] = []
+    params: list[object] = []
+    if args.status:
+        conditions.append("status = ?")
+        params.append(args.status)
+    if args.spec:
+        conditions.append("spec_id = ?")
+        params.append(args.spec)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     rows = conn.execute(
-        "SELECT id, spec_id, status, active, attempts, updated_at FROM tasks ORDER BY updated_at DESC"
+        f"SELECT id, spec_id, status, active, attempts, updated_at FROM tasks {where} ORDER BY updated_at DESC",
+        params,
     ).fetchall()
     print_rows(rows, ["id", "spec_id", "status", "active", "attempts", "updated_at"])
 
@@ -840,9 +860,23 @@ def search_memory(
 
 def command_memory_list(args: argparse.Namespace) -> None:
     conn = connect()
-    clause = "" if args.all else "WHERE status = 'active' AND active = 1"
+    conditions: list[str] = []
+    params: list[object] = []
+    if not args.all:
+        conditions.append("status = 'active' AND active = 1")
+    if args.kind:
+        conditions.append("kind = ?")
+        params.append(args.kind)
+    if args.area:
+        conditions.append("area = ?")
+        params.append(args.area)
+    if args.status:
+        conditions.append("status = ?")
+        params.append(args.status)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     rows = conn.execute(
-        f"SELECT id, kind, area, active, status, summary, updated_at FROM memory {clause} ORDER BY updated_at DESC"
+        f"SELECT id, kind, area, active, status, summary, updated_at FROM memory {where} ORDER BY updated_at DESC",
+        params,
     ).fetchall()
     print_rows(rows, ["id", "kind", "area", "active", "status", "summary", "updated_at"])
 
@@ -1080,7 +1114,9 @@ def build_parser() -> argparse.ArgumentParser:
     spec_new.add_argument("--risk", default="medium")
     spec_new.set_defaults(func=command_spec_new)
 
-    spec_list = spec_sub.add_parser("list", help="list all specs")
+    spec_list = spec_sub.add_parser("list", help="list specs (filterable)")
+    spec_list.add_argument("--status", metavar="STATUS", help="filter by status (e.g. draft, locked, closed)")
+    spec_list.add_argument("--area", metavar="AREA", help="filter by area")
     spec_list.set_defaults(func=command_spec_list)
 
     spec_show = spec_sub.add_parser("show", help="show full details of a spec (defaults to active)")
@@ -1114,7 +1150,9 @@ def build_parser() -> argparse.ArgumentParser:
     task_attempt = task_sub.add_parser("attempt", help="start a new implementation attempt")
     task_attempt.set_defaults(func=command_task_attempt)
 
-    task_list = task_sub.add_parser("list", help="list all tasks")
+    task_list = task_sub.add_parser("list", help="list tasks (filterable)")
+    task_list.add_argument("--status", metavar="STATUS", help="filter by status (e.g. pending, in_progress, done, blocked)")
+    task_list.add_argument("--spec", metavar="SPEC_ID", help="filter by spec id")
     task_list.set_defaults(func=command_task_list)
 
     context = sub.add_parser("context", help="show active spec + relevant memory for a query")
@@ -1161,8 +1199,11 @@ def build_parser() -> argparse.ArgumentParser:
     mem_search.add_argument("--limit", type=int, default=8)
     mem_search.set_defaults(func=command_memory_search)
 
-    mem_list = mem_sub.add_parser("list", help="list all memory entries")
-    mem_list.add_argument("--all", action="store_true")
+    mem_list = mem_sub.add_parser("list", help="list memory entries (filterable)")
+    mem_list.add_argument("--all", action="store_true", help="include inactive/deprecated entries")
+    mem_list.add_argument("--kind", metavar="KIND", help="filter by kind (command, decision, pitfall, convention, architecture, testing)")
+    mem_list.add_argument("--area", metavar="AREA", help="filter by area")
+    mem_list.add_argument("--status", metavar="STATUS", help="filter by status (active, deprecated)")
     mem_list.set_defaults(func=command_memory_list)
 
     mem_active = mem_sub.add_parser("set-active", help="enable or disable a memory entry")

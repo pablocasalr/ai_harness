@@ -77,6 +77,37 @@ def install_agents_file(target: Path, force: bool) -> str:
     return "appended harness section"
 
 
+def upgrade_agents_file(target: Path) -> str:
+    source = SOURCE_ROOT / "AGENTS.md"
+    destination = target / "AGENTS.md"
+    if not source.exists():
+        return "source AGENTS.md missing"
+    source_text = source.read_text(encoding="utf-8")
+    if not destination.exists():
+        destination.write_text(source_text, encoding="utf-8")
+        return "created"
+    existing = destination.read_text(encoding="utf-8-sig")
+    if "Codex Workflow Harness" not in existing:
+        # no harness section yet — append
+        destination.write_text(existing.rstrip() + "\n\n---\n\n" + source_text, encoding="utf-8")
+        return "harness section appended"
+    # replace only the harness section, preserve project-specific content before it
+    separator = "\n\n---\n\n"
+    if separator in existing:
+        parts = existing.split(separator)
+        # find which part contains the harness section
+        project_parts = [p for p in parts if "Codex Workflow Harness" not in p]
+        if project_parts:
+            destination.write_text(
+                separator.join(project_parts).rstrip() + separator + source_text,
+                encoding="utf-8",
+            )
+            return "harness section updated (project content preserved)"
+    # entire file is the harness section — replace it
+    destination.write_text(source_text, encoding="utf-8")
+    return "harness section updated"
+
+
 
 def initialize_target(target: Path) -> None:
     script = target / ".harness" / "harness.py"
@@ -136,26 +167,32 @@ def command_install(args: argparse.Namespace) -> None:
 
 
 def command_upgrade(args: argparse.Namespace) -> None:
-    projects = scan_projects(args.scan)
-    if not projects:
-        print("No projects with .harness found.")
-        return
-
-    # exclude this source repo from upgrade targets
-    targets = [p for p in projects if p.resolve() != SOURCE_ROOT.resolve()]
-    skipped = len(projects) - len(targets)
-
-    print(f"Found {len(projects)} project(s){f', skipping source repo' if skipped else ''}:")
-    for p in projects:
-        marker = "  (source repo — skipped)" if p.resolve() == SOURCE_ROOT.resolve() else ""
-        print(f"  {p}{marker}")
-    print()
+    if not args.scan:
+        cwd = Path.cwd().resolve()
+        if not (cwd / ".harness" / "harness.py").exists():
+            sys.exit("No .harness/harness.py found in current directory. Use --scan to specify dirs.")
+        targets = [cwd]
+        print(f"Upgrading current directory: {cwd}")
+        print()
+    else:
+        projects = scan_projects(args.scan)
+        if not projects:
+            print("No projects with .harness found.")
+            return
+        targets = [p for p in projects if p.resolve() != SOURCE_ROOT.resolve()]
+        skipped = len(projects) - len(targets)
+        print(f"Found {len(projects)} project(s){f', skipping source repo' if skipped else ''}:")
+        for p in projects:
+            marker = "  (source repo — skipped)" if p.resolve() == SOURCE_ROOT.resolve() else ""
+            print(f"  {p}{marker}")
+        print()
 
     errors: list[str] = []
     upgraded = 0
     for project in targets:
         target_harness = project / ".harness"
         copied = copy_harness_files(target_harness, force=True, skip={"config.yaml"})
+        agents_result = upgrade_agents_file(project)
         result = subprocess.run(
             [sys.executable, str(target_harness / "harness.py"), "init"],
             cwd=project,
@@ -168,6 +205,7 @@ def command_upgrade(args: argparse.Namespace) -> None:
         print(f"{project.name}  ({project})")
         for f in copied:
             print(f"  copied: {f}")
+        print(f"  AGENTS.md: {agents_result}")
         if migrations_out:
             print(f"  migrations: {migrations_out}")
         print(f"  status: {status}")
@@ -303,9 +341,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     upgrade = sub.add_parser(
         "upgrade",
-        help="update harness files and run migrations in all installed projects found under --scan dirs",
+        help="update harness files and run migrations; without --scan upgrades current directory",
     )
-    upgrade.add_argument("--scan", nargs="+", required=True, metavar="DIR",
+    upgrade.add_argument("--scan", nargs="+", default=None, metavar="DIR",
                          help="one or more root dirs to scan for projects with .harness")
     upgrade.set_defaults(func=command_upgrade)
 

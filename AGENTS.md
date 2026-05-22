@@ -42,6 +42,52 @@ This project uses `.harness/` as the workflow contract for Codex.
 11. After user approval, close the work and propose memory:
     `python .harness/harness.py close`
 
+## Command Reference
+
+```
+# Specs
+python .harness/harness.py spec new "title" [--area AREA] [--risk low|medium|high]
+python .harness/harness.py spec list [--status draft|locked|closed] [--area AREA]
+python .harness/harness.py spec show [ID]          # defaults to active spec
+python .harness/harness.py spec set [ID] --goal TEXT --scope TEXT --out-of-scope TEXT --acceptance TEXT --tests TEXT --area AREA --risk LEVEL
+python .harness/harness.py spec lock [ID] [--force]
+
+# Tasks
+python .harness/harness.py task attempt            # start new implementation attempt
+python .harness/harness.py task active             # show current active task
+python .harness/harness.py task list [--status pending|in_progress|done|blocked] [--spec SPEC_ID]
+
+# Context
+python .harness/harness.py context "query" [--include-inactive]
+
+# Tests
+python .harness/harness.py test plan [--pattern PATTERN]
+python .harness/harness.py test run [--targeted|--full] [--pattern PATTERN] [--dry-run]
+
+# Review & close
+python .harness/harness.py review
+python .harness/harness.py close
+
+# Memory — search and list
+python .harness/harness.py memory search "query" [--include-inactive] [--limit N]
+python .harness/harness.py memory list [--all] [--kind KIND] [--area AREA] [--status active|deprecated]
+
+# Memory — add directly (use propose instead during tasks)
+python .harness/harness.py memory add --kind KIND --area AREA --summary TEXT --content TEXT [--tags TAGS] [--active yes|no]
+
+# Memory — propose → review → accept/reject
+python .harness/harness.py memory propose --kind KIND --area AREA --summary TEXT --content TEXT [--tags TAGS] [--confidence 0.0-1.0]
+python .harness/harness.py memory candidates [--all]
+python .harness/harness.py memory accept ID [--active yes|no]
+python .harness/harness.py memory reject ID
+
+# Memory — lifecycle
+python .harness/harness.py memory set-active ID yes|no
+python .harness/harness.py memory deprecate ID
+```
+
+Valid memory kinds: `command`, `decision`, `pitfall`, `convention`, `architecture`, `testing`
+
 ## Memory Rules
 
 - Do not store full conversations, large logs, complete diffs, or obvious code facts.
