@@ -1,7 +1,6 @@
 # Harness local state
 .harness/harness.db
 .harness/harness.db-*
-.harness/logs/
 
 # Python cache
 __pycache__/

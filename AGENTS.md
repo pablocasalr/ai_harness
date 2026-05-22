@@ -19,6 +19,7 @@ This project uses `.harness/` as the workflow contract for Codex.
 - In HTML/templates, comment components or meaningful structural blocks in Spanish.
 - Comments must clarify intent, not restate obvious syntax.
 - Existing files must be edited in place. Do not delete and recreate a file to modify it unless the user explicitly approves that operation.
+- If the implementation generates database migrations, run them before committing.
 
 ## Normal Workflow
 
@@ -42,8 +43,9 @@ This project uses `.harness/` as the workflow contract for Codex.
 11. After user approval, close the work:
     `python .harness/harness.py close`
     This closes the spec/task in DB and prints a suggested commit message.
-12. Stage only the files you modified and commit using the suggested message:
-    `git add <file1> <file2> ...`
+12. If the implementation includes database migrations, run them before committing.
+13. Stage the files you modified plus the harness logs, then commit using the suggested message:
+    `git add <file1> <file2> ... .harness/logs/`
     `git commit -m "feat(auth): add login"`
 13. Register the commit hash:
     `python .harness/harness.py close --register-hash <hash>`
