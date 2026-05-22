@@ -2,7 +2,6 @@
 .harness/harness.db
 .harness/harness.db-*
 .harness/logs/
-.harness/artifacts/
 
 # Python cache
 __pycache__/

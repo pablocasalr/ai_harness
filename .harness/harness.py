@@ -20,7 +20,6 @@ HARNESS_DIR = ROOT / ".harness"
 DB_PATH = HARNESS_DIR / "harness.db"
 CONFIG_PATH = HARNESS_DIR / "config.yaml"
 LOG_DIR = HARNESS_DIR / "logs"
-ARTIFACTS_DIR = HARNESS_DIR / "artifacts"
 
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -194,7 +193,6 @@ def slugify(value: str) -> str:
 def ensure_dirs() -> None:
     HARNESS_DIR.mkdir(exist_ok=True)
     LOG_DIR.mkdir(exist_ok=True)
-    ARTIFACTS_DIR.mkdir(exist_ok=True)
 
 
 def apply_migrations(conn: sqlite3.Connection) -> None:

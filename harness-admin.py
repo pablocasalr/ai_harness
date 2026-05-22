@@ -149,7 +149,6 @@ def command_install(args: argparse.Namespace) -> None:
 
     target_harness = target / ".harness"
     target_harness.mkdir(exist_ok=True)
-    (target_harness / "artifacts").mkdir(exist_ok=True)
     (target_harness / "logs").mkdir(exist_ok=True)
 
     copied = copy_harness_files(target_harness, force=args.force)
