@@ -5,7 +5,6 @@ import argparse
 import json
 import os
 import re
-import shutil
 import sqlite3
 import subprocess
 import sys
@@ -17,9 +16,6 @@ from typing import Any
 
 
 ROOT = Path.cwd()
-SCRIPT_PATH = Path(__file__).resolve()
-SOURCE_HARNESS_DIR = SCRIPT_PATH.parent
-SOURCE_ROOT = SOURCE_HARNESS_DIR.parent
 HARNESS_DIR = ROOT / ".harness"
 DB_PATH = HARNESS_DIR / "harness.db"
 CONFIG_PATH = HARNESS_DIR / "config.yaml"
@@ -393,118 +389,6 @@ def command_init(args: argparse.Namespace) -> None:
 def command_detect(_: argparse.Namespace) -> None:
     print(json.dumps(detect_project(), indent=2))
 
-
-def command_install(args: argparse.Namespace) -> None:
-    # Instala el harness en otro proyecto sin copiar estado local ni historico de ejecuciones.
-    target = Path(args.target).expanduser().resolve()
-    if not target.exists():
-        if args.create:
-            target.mkdir(parents=True)
-        else:
-            sys.exit(f"Target does not exist: {target}")
-    if not target.is_dir():
-        sys.exit(f"Target is not a directory: {target}")
-
-    target_harness = target / ".harness"
-    target_harness.mkdir(exist_ok=True)
-    (target_harness / "artifacts").mkdir(exist_ok=True)
-    (target_harness / "logs").mkdir(exist_ok=True)
-
-    copied = copy_harness_files(target_harness, force=args.force)
-    readme_result = install_readme(target, force=args.force)
-    agents_result = install_agents_file(target, force=args.force)
-    create_launchers(target_harness)
-    initialize_target(target)
-
-    print(f"Installed harness in {target}")
-    for item in copied:
-        print(f"- copied: {item}")
-    print(f"- README: {readme_result}")
-    print(f"- AGENTS.md: {agents_result}")
-    print("Run from the target project:")
-    print("  python .harness/harness.py detect")
-    print("Optional launcher:")
-    print("  Add .harness/bin to PATH to run: harness install --target .")
-
-
-def copy_harness_files(target_harness: Path, force: bool) -> list[str]:
-    # Copia solo archivos de plantilla; no copia base de datos, logs ni artifacts.
-    copied: list[str] = []
-    for name in ["harness.py", "config.yaml", "BEST_PRACTICES.md"]:
-        source = SOURCE_HARNESS_DIR / name
-        destination = target_harness / name
-        if destination.exists() and not force:
-            continue
-        shutil.copyfile(source, destination)
-        copied.append(str(destination.relative_to(target_harness.parent)))
-    return copied
-
-
-def install_readme(target: Path, force: bool) -> str:
-    # Instala la documentacion principal sin sobrescribir el README del proyecto destino.
-    source = SOURCE_ROOT / "README.md"
-    destination = target / "README.md"
-    if not source.exists():
-        return "source README.md missing"
-    if not destination.exists():
-        shutil.copyfile(source, destination)
-        return "README.md created"
-    harness_destination = target / "README.harness.md"
-    if harness_destination.exists() and not force:
-        return "README.harness.md already exists"
-    shutil.copyfile(source, harness_destination)
-    return "README.harness.md created"
-
-
-def install_agents_file(target: Path, force: bool) -> str:
-    # Crea o fusiona AGENTS.md para preservar instrucciones previas del proyecto destino.
-    source = SOURCE_ROOT / "AGENTS.md"
-    destination = target / "AGENTS.md"
-    source_text = source.read_text(encoding="utf-8")
-    if not destination.exists():
-        destination.write_text(source_text, encoding="utf-8")
-        return "created"
-
-    existing = destination.read_text(encoding="utf-8-sig")
-    if "Codex Workflow Harness" in existing and not force:
-        return "already contains harness section"
-    if force and "Codex Workflow Harness" in existing:
-        destination.write_text(source_text, encoding="utf-8")
-        return "replaced by --force"
-
-    separator = "\n\n---\n\n"
-    destination.write_text(existing.rstrip() + separator + source_text, encoding="utf-8")
-    return "appended harness section"
-
-
-def create_launchers(target_harness: Path) -> None:
-    # Genera launchers locales para poder exponer el comando `harness` mediante PATH.
-    bin_dir = target_harness / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    ps1 = bin_dir / "harness.ps1"
-    cmd = bin_dir / "harness.cmd"
-    ps1.write_text(
-        "$script = Join-Path $PSScriptRoot '..\\harness.py'\n"
-        "python $script @args\n",
-        encoding="utf-8",
-    )
-    cmd.write_text(
-        "@echo off\r\n"
-        "python \"%~dp0..\\harness.py\" %*\r\n",
-        encoding="utf-8",
-    )
-
-
-def initialize_target(target: Path) -> None:
-    # Inicializa la base SQLite del proyecto destino usando el propio harness instalado.
-    script = target / ".harness" / "harness.py"
-    subprocess.run(
-        [sys.executable, str(script), "init"],
-        cwd=target,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
 
 
 def command_spec_new(args: argparse.Namespace) -> None:
@@ -1181,12 +1065,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     detect = sub.add_parser("detect", help="auto-detect project language and test commands")
     detect.set_defaults(func=command_detect)
-
-    install = sub.add_parser("install", help="install harness into another project directory")
-    install.add_argument("--target", required=True)
-    install.add_argument("--force", action="store_true")
-    install.add_argument("--create", action="store_true")
-    install.set_defaults(func=command_install)
 
     spec = sub.add_parser("spec", help="manage specs (requirements)")
     spec_sub = spec.add_subparsers(dest="spec_command", required=True)

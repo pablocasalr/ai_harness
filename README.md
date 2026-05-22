@@ -11,59 +11,52 @@ It provides:
 - SQLite memory with full-text search
 - user-reviewed memory proposals
 
-Run commands from the project root:
+## Setup (run once after cloning)
 
 ```powershell
-python .harness/harness.py init
-python .harness/harness.py spec new "add email uniqueness validation"
-python .harness/harness.py spec lock
-python .harness/harness.py context "email uniqueness validation"
-python .harness/harness.py task attempt
-python .harness/harness.py test plan
-python .harness/harness.py test run --targeted
-python .harness/harness.py review
-python .harness/harness.py close
+python harness-admin.py setup
 ```
 
-If `.harness/bin` is in your PATH, the same CLI can be used as:
+Adds `bin/` to your user PATH and initializes the local harness DB. After opening a new terminal, `harness-admin` is available globally.
+
+## Admin commands (`harness-admin`)
+
+`harness-admin.py` lives in this repo and is never copied to projects. It manages installations.
 
 ```powershell
-harness install --target .
-harness spec new "add email uniqueness validation"
-harness test run --targeted
+# install harness into another project
+harness-admin install --target C:\path\to\Project
+
+# update harness files + run DB migrations in all installed projects
+harness-admin upgrade --scan C:\Users\you\Projects
+harness-admin upgrade --scan C:\path\one C:\path\two
 ```
 
-## Install In Another Project
+`install` copies only template files — never DB, logs, or artifacts:
 
-Install the harness into any project:
-
-```powershell
-python C:\path\to\Harness\.harness\harness.py install --target C:\path\to\Project
-```
-
-Or, when the launcher is available in PATH:
-
-```powershell
-harness install --target .
-```
-
-The installer copies only reusable harness files:
-
-- `AGENTS.md`
-- `README.md`
 - `.harness/harness.py`
 - `.harness/config.yaml`
 - `.harness/BEST_PRACTICES.md`
-- `.harness/bin/harness.ps1`
-- `.harness/bin/harness.cmd`
+- `.harness/bin/harness.ps1` / `harness.cmd`
+- `AGENTS.md` (appended if already exists)
+- `README.md` (copied as `README.harness.md` if README already exists)
 
-It does not copy project state:
+`upgrade` skips this source repo automatically and preserves each project's `config.yaml`.
 
-- `.harness/harness.db`
-- `.harness/logs`
-- `.harness/artifacts`
+## Project commands (`harness`)
 
-If `AGENTS.md` already exists in the target project, the harness section is appended instead of deleting or recreating the file. Use `--force` only when you explicitly want to overwrite harness files.
+Run these from within an installed project. If `.harness/bin` is in PATH, use `harness`; otherwise `python .harness/harness.py`.
+
+```powershell
+harness spec new "add email uniqueness validation"
+harness spec lock
+harness context "email uniqueness validation"
+harness task attempt
+harness test plan
+harness test run --targeted
+harness review
+harness close
+```
 
 ## Specs
 
