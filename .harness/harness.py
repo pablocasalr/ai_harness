@@ -960,11 +960,8 @@ def _infer_commit_type(title: str) -> str:
 
 def command_close(args: argparse.Namespace) -> None:
     conn = connect()
-    spec = active_spec(conn)
-    task = active_task(conn)
-    if not spec or not task:
-        sys.exit("No active spec/task.")
 
+    # Registra hashes en specs ya cerradas sin exigir una spec o tarea activa.
     if args.register_hash:
         if not args.spec_id:
             sys.exit("--register-hash requires --spec-id <spec_id>")
@@ -982,6 +979,11 @@ def command_close(args: argparse.Namespace) -> None:
         conn.commit()
         print(f"Registered commit {commit_hash[:8]} for spec {target_spec['id']}.")
         return
+
+    spec = active_spec(conn)
+    task = active_task(conn)
+    if not spec or not task:
+        sys.exit("No active spec/task.")
 
     if not args.force and spec["status"] != "locked":
         sys.exit("Spec is not locked. Use --force only if the user explicitly approved closing.")
