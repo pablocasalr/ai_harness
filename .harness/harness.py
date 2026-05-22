@@ -62,6 +62,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
+# Each entry: (target_version: int, sql: str)
+# Only ADD new entries at the end. Never modify existing ones.
+# Use ALTER TABLE ADD COLUMN for additive changes.
+# For destructive changes: new table → copy → drop → rename.
+MIGRATIONS: list[tuple[int, str]] = [
+    # (1, "ALTER TABLE specs ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'"),
+]
+
 SCHEMA = """
 PRAGMA journal_mode = WAL;
 
@@ -193,11 +201,25 @@ def ensure_dirs() -> None:
     ARTIFACTS_DIR.mkdir(exist_ok=True)
 
 
+def apply_migrations(conn: sqlite3.Connection) -> None:
+    current: int = conn.execute("PRAGMA user_version").fetchone()[0]
+    pending = [(v, sql) for v, sql in MIGRATIONS if v > current]
+    if not pending:
+        return
+    for version, sql in pending:
+        conn.executescript(sql)
+        conn.execute(f"PRAGMA user_version = {version}")
+        conn.commit()
+    final = pending[-1][0]
+    print(f"Applied {len(pending)} migration(s): schema v{current} → v{final}", file=sys.stderr)
+
+
 def connect() -> sqlite3.Connection:
     ensure_dirs()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    apply_migrations(conn)
     return conn
 
 
