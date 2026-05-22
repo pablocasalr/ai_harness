@@ -62,7 +62,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 # Use ALTER TABLE ADD COLUMN for additive changes.
 # For destructive changes: new table → copy → drop → rename.
 MIGRATIONS: list[tuple[int, str]] = [
-    # (1, "ALTER TABLE specs ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal'"),
+    (1, "ALTER TABLE specs ADD COLUMN commit_hash TEXT; ALTER TABLE tasks ADD COLUMN commit_hash TEXT"),
 ]
 
 SCHEMA = """
@@ -277,7 +277,11 @@ def detect_project() -> dict[str, Any]:
     files = {p.name for p in ROOT.iterdir() if p.is_file()}
     result: dict[str, Any] = {"language": "unknown", "test": {"targeted": [], "full": []}, "lint": [], "build": []}
 
-    if "package.json" in files:
+    if (ROOT / "artisan").exists():
+        result["language"] = "php-laravel"
+        result["test"]["full"] = ["php artisan test"]
+        result["test"]["targeted"] = ["php artisan test --filter={pattern}"]
+    elif "package.json" in files:
         result["language"] = "node"
         try:
             package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
@@ -298,12 +302,8 @@ def detect_project() -> dict[str, Any]:
         result["lint"] = ["ruff check ."]
     elif "composer.json" in files:
         result["language"] = "php"
-        if (ROOT / "artisan").exists():
-            result["test"]["full"] = ["php artisan test"]
-            result["test"]["targeted"] = ["php artisan test --filter={pattern}"]
-        else:
-            result["test"]["full"] = ["vendor/bin/phpunit"]
-            result["test"]["targeted"] = ["vendor/bin/phpunit --filter {pattern}"]
+        result["test"]["full"] = ["vendor/bin/phpunit"]
+        result["test"]["targeted"] = ["vendor/bin/phpunit --filter {pattern}"]
     elif "go.mod" in files:
         result["language"] = "go"
         result["test"]["full"] = ["go test ./..."]
@@ -519,6 +519,28 @@ def command_spec_lock(args: argparse.Namespace) -> None:
     )
     conn.commit()
     print(f"Locked spec: {spec['id']}")
+
+
+def command_spec_activate(args: argparse.Namespace) -> None:
+    conn = connect()
+    spec = conn.execute("SELECT * FROM specs WHERE id = ?", (args.id,)).fetchone()
+    if not spec:
+        sys.exit(f"Spec not found: {args.id}")
+    if spec["status"] == "closed":
+        sys.exit("Cannot activate a closed spec.")
+    timestamp = now()
+    conn.execute("UPDATE specs SET active = 0, updated_at = ? WHERE active = 1", (timestamp,))
+    conn.execute("UPDATE tasks SET active = 0, updated_at = ? WHERE active = 1", (timestamp,))
+    conn.execute(
+        "UPDATE specs SET active = 1, updated_at = ? WHERE id = ?",
+        (timestamp, args.id),
+    )
+    conn.execute(
+        "UPDATE tasks SET active = 1, updated_at = ? WHERE spec_id = ?",
+        (timestamp, args.id),
+    )
+    conn.commit()
+    print(f"Activated spec: {spec['id']} ({spec['title']}) [{spec['status']}]")
 
 
 def get_spec(conn: sqlite3.Connection, spec_id: str | None) -> sqlite3.Row | None:
@@ -742,10 +764,6 @@ def command_review(_: argparse.Namespace) -> None:
         status = "blocked_needs_user"
         findings.append(f"Max implementation attempts reached ({task['attempts']}/{max_attempts}).")
 
-    max_diff = int(config.get("review", {}).get("max_diff_lines_warn", 800))
-    if diff["available"] and diff["lines"] is not None and diff["lines"] > max_diff:
-        findings.append(f"Large diff warning: {diff['lines']} changed lines exceeds {max_diff}.")
-
     print("# Harness Review")
     print(f"status: {status}")
     print(f"spec: {spec['id']} ({spec['title']})")
@@ -899,101 +917,20 @@ def command_memory_deprecate(args: argparse.Namespace) -> None:
     print(f"Deprecated memory {args.id}")
 
 
-def command_memory_propose(args: argparse.Namespace) -> None:
-    conn = connect()
-    spec = active_spec(conn)
-    candidate_id = new_id("cand")
-    conn.execute(
-        """
-        INSERT INTO memory_candidates (
-          id, spec_id, area, kind, tags, summary, content, source,
-          confidence, active_default, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?)
-        """,
-        (
-            candidate_id,
-            spec["id"] if spec else None,
-            args.area,
-            args.kind,
-            args.tags or "",
-            args.summary,
-            args.content,
-            args.source or (spec["id"] if spec else ""),
-            args.confidence,
-            yes_no(args.active),
-            now(),
-        ),
-    )
-    conn.commit()
-    print(f"Proposed memory candidate: {candidate_id}")
 
-
-def command_memory_candidates(args: argparse.Namespace) -> None:
-    conn = connect()
-    clause = "" if args.all else "WHERE status = 'proposed'"
-    rows = conn.execute(
-        f"SELECT * FROM memory_candidates {clause} ORDER BY created_at DESC"
-    ).fetchall()
-    if not rows:
-        print("No memory candidates.")
-        return
-    for row in rows:
-        print(f"- id: {row['id']}")
-        print(f"  status: {row['status']}")
-        print(f"  kind: {row['kind']}")
-        print(f"  area: {row['area']}")
-        print(f"  active_default: {row['active_default']}")
-        print(f"  summary: {row['summary']}")
-        print(f"  content: {row['content']}")
-
-
-def command_memory_accept(args: argparse.Namespace) -> None:
-    conn = connect()
-    cand = conn.execute("SELECT * FROM memory_candidates WHERE id = ?", (args.id,)).fetchone()
-    if not cand:
-        sys.exit("Candidate not found.")
-    if cand["status"] != "proposed":
-        sys.exit(f"Candidate is already {cand['status']}.")
-    timestamp = now()
-    mem_id = new_id("mem")
-    active = cand["active_default"] if args.active is None else yes_no(args.active)
-    conn.execute(
-        """
-        INSERT INTO memory (
-          id, scope, area, kind, tags, summary, content, source,
-          confidence, active, status, created_at, updated_at
-        ) VALUES (?, 'project', ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
-        """,
-        (
-            mem_id,
-            cand["area"],
-            cand["kind"],
-            cand["tags"],
-            cand["summary"],
-            cand["content"],
-            cand["source"],
-            cand["confidence"],
-            active,
-            timestamp,
-            timestamp,
-        ),
-    )
-    conn.execute(
-        "UPDATE memory_candidates SET status = 'accepted', decided_at = ? WHERE id = ?",
-        (timestamp, cand["id"]),
-    )
-    conn.commit()
-    print(f"Accepted candidate {cand['id']} as memory {mem_id} active={active}")
-
-
-def command_memory_reject(args: argparse.Namespace) -> None:
-    conn = connect()
-    conn.execute(
-        "UPDATE memory_candidates SET status = 'rejected', decided_at = ? WHERE id = ?",
-        (now(), args.id),
-    )
-    conn.commit()
-    print(f"Rejected candidate {args.id}")
+def _infer_commit_type(title: str) -> str:
+    t = title.lower()
+    if any(w in t for w in ("fix", "bug", "error", "correct", "repair", "arregla", "correg")):
+        return "fix"
+    if any(w in t for w in ("refactor", "clean", "reorganiz", "restructur", "limpia", "reorganiza")):
+        return "refactor"
+    if any(w in t for w in ("docs", "document", "readme", "documenta")):
+        return "docs"
+    if any(w in t for w in ("test", "spec", "coverage", "prueba")):
+        return "test"
+    if any(w in t for w in ("chore", "bump", "upgrade dep", "update dep")):
+        return "chore"
+    return "feat"
 
 
 def command_close(args: argparse.Namespace) -> None:
@@ -1013,65 +950,45 @@ def command_close(args: argparse.Namespace) -> None:
         "UPDATE tasks SET status = 'closed', active = 0, outcome = ?, updated_at = ? WHERE id = ?",
         (args.outcome or "closed after user review", timestamp, task["id"]),
     )
-    propose_close_memory(conn, spec)
     conn.commit()
     print(f"Closed task {task['id']} and spec {spec['id']}.")
-    print("Memory candidates were proposed. Review them with:")
-    print("python .harness/harness.py memory candidates")
+    print("Propose memory entries via chat, then add accepted ones with: harness memory add ...")
 
-
-def propose_close_memory(conn: sqlite3.Connection, spec: sqlite3.Row) -> None:
-    existing = conn.execute(
-        "SELECT COUNT(*) AS count FROM memory_candidates WHERE spec_id = ?",
-        (spec["id"],),
-    ).fetchone()["count"]
-    if existing:
+    if args.no_commit:
         return
-    timestamp = now()
-    candidates = []
-    if spec["test_strategy"].strip():
-        candidates.append(
-            (
-                new_id("cand"),
-                spec["id"],
-                spec["area"],
-                "testing",
-                f"{spec['area']}, tests",
-                f"Test strategy for {spec['title']}",
-                spec["test_strategy"],
-                spec["id"],
-                0.7,
-                1,
-                "proposed",
-                timestamp,
-            )
-        )
-    if spec["acceptance_criteria"].strip():
-        candidates.append(
-            (
-                new_id("cand"),
-                spec["id"],
-                spec["area"],
-                "decision",
-                f"{spec['area']}, acceptance",
-                f"Accepted contract for {spec['title']}",
-                spec["acceptance_criteria"],
-                spec["id"],
-                0.6,
-                0,
-                "proposed",
-                timestamp,
-            )
-        )
-    conn.executemany(
-        """
-        INSERT INTO memory_candidates (
-          id, spec_id, area, kind, tags, summary, content, source,
-          confidence, active_default, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        candidates,
+    if not (ROOT / ".git").exists():
+        print("Not a git repository — skipping commit.")
+        return
+    commit_type = args.type or _infer_commit_type(spec["title"])
+    area = (spec["area"] or "").strip()
+    scope_part = f"({area})" if area and area != "general" else ""
+    commit_msg = f"{commit_type}{scope_part}: {spec['title']}"
+    subprocess.run(["git", "add", "-A"], cwd=ROOT, check=False, capture_output=True)
+    result = subprocess.run(
+        ["git", "commit", "-m", commit_msg],
+        cwd=ROOT, text=True, capture_output=True,
     )
+    if result.returncode == 0:
+        hash_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT, text=True, capture_output=True,
+        )
+        commit_hash = hash_result.stdout.strip() if hash_result.returncode == 0 else None
+        if commit_hash:
+            conn.execute(
+                "UPDATE specs SET commit_hash = ? WHERE id = ?",
+                (commit_hash, spec["id"]),
+            )
+            conn.execute(
+                "UPDATE tasks SET commit_hash = ? WHERE id = ?",
+                (commit_hash, task["id"]),
+            )
+            conn.commit()
+        print(f"Committed: {commit_msg}" + (f" ({commit_hash[:8]})" if commit_hash else ""))
+    else:
+        err = result.stderr.strip() or result.stdout.strip()
+        print(f"Git commit failed: {err}", file=sys.stderr)
+        print("Stage and commit manually.")
 
 
 def yes_no(value: str | bool | None) -> int:
@@ -1138,6 +1055,10 @@ def build_parser() -> argparse.ArgumentParser:
     spec_lock.add_argument("id", nargs="?")
     spec_lock.add_argument("--force", action="store_true")
     spec_lock.set_defaults(func=command_spec_lock)
+
+    spec_activate = spec_sub.add_parser("activate", help="set an existing draft spec as the active one")
+    spec_activate.add_argument("id")
+    spec_activate.set_defaults(func=command_spec_activate)
 
     task = sub.add_parser("task", help="manage implementation tasks")
     task_sub = task.add_subparsers(dest="task_command", required=True)
@@ -1213,33 +1134,12 @@ def build_parser() -> argparse.ArgumentParser:
     mem_deprecate.add_argument("id")
     mem_deprecate.set_defaults(func=command_memory_deprecate)
 
-    mem_propose = mem_sub.add_parser("propose", help="propose a memory candidate for later review")
-    mem_propose.add_argument("--kind", required=True)
-    mem_propose.add_argument("--area", default="general")
-    mem_propose.add_argument("--summary", required=True)
-    mem_propose.add_argument("--content", required=True)
-    mem_propose.add_argument("--tags")
-    mem_propose.add_argument("--source")
-    mem_propose.add_argument("--confidence", type=float, default=0.8)
-    mem_propose.add_argument("--active", choices=["yes", "no"], default="yes")
-    mem_propose.set_defaults(func=command_memory_propose)
 
-    mem_candidates = mem_sub.add_parser("candidates", help="list pending memory candidates")
-    mem_candidates.add_argument("--all", action="store_true")
-    mem_candidates.set_defaults(func=command_memory_candidates)
-
-    mem_accept = mem_sub.add_parser("accept", help="accept a memory candidate into active memory")
-    mem_accept.add_argument("id")
-    mem_accept.add_argument("--active", choices=["yes", "no"])
-    mem_accept.set_defaults(func=command_memory_accept)
-
-    mem_reject = mem_sub.add_parser("reject", help="reject a memory candidate")
-    mem_reject.add_argument("id")
-    mem_reject.set_defaults(func=command_memory_reject)
-
-    close = sub.add_parser("close", help="close the active spec/task after user review")
+    close = sub.add_parser("close", help="close active spec/task and commit with conventional commits")
     close.add_argument("--outcome")
     close.add_argument("--force", action="store_true")
+    close.add_argument("--type", metavar="TYPE", help="override commit type (feat, fix, refactor, docs, test, chore)")
+    close.add_argument("--no-commit", action="store_true", help="skip git commit")
     close.set_defaults(func=command_close)
 
     return parser

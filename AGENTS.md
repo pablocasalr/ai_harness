@@ -39,8 +39,13 @@ This project uses `.harness/` as the workflow contract for Codex.
    `python .harness/harness.py review`
 9. If review fails for code reasons, make one focused fix attempt and repeat tests/review.
 10. If review still fails, stop and report what failed, what was tried, and options.
-11. After user approval, close the work and propose memory:
+11. After user approval, close the work:
     `python .harness/harness.py close`
+    This closes the spec/task and commits with conventional commits automatically.
+    Override type if needed: `python .harness/harness.py close --type fix`
+    Skip commit: `python .harness/harness.py close --no-commit`
+12. Propose any reusable memory entries via chat. After user confirms, add them:
+    `python .harness/harness.py memory add --kind decision --area AUTH --summary "..." --content "..."`
 
 ## Command Reference
 
@@ -51,6 +56,7 @@ python .harness/harness.py spec list [--status draft|locked|closed] [--area AREA
 python .harness/harness.py spec show [ID]          # defaults to active spec
 python .harness/harness.py spec set [ID] --goal TEXT --scope TEXT --out-of-scope TEXT --acceptance TEXT --tests TEXT --area AREA --risk LEVEL
 python .harness/harness.py spec lock [ID] [--force]
+python .harness/harness.py spec activate ID     # set a backlog draft as active without creating a new one
 
 # Tasks
 python .harness/harness.py task attempt            # start new implementation attempt
@@ -75,12 +81,6 @@ python .harness/harness.py memory list [--all] [--kind KIND] [--area AREA] [--st
 # Memory — add directly (use propose instead during tasks)
 python .harness/harness.py memory add --kind KIND --area AREA --summary TEXT --content TEXT [--tags TAGS] [--active yes|no]
 
-# Memory — propose → review → accept/reject
-python .harness/harness.py memory propose --kind KIND --area AREA --summary TEXT --content TEXT [--tags TAGS] [--confidence 0.0-1.0]
-python .harness/harness.py memory candidates [--all]
-python .harness/harness.py memory accept ID [--active yes|no]
-python .harness/harness.py memory reject ID
-
 # Memory — lifecycle
 python .harness/harness.py memory set-active ID yes|no
 python .harness/harness.py memory deprecate ID
@@ -93,8 +93,8 @@ Valid memory kinds: `command`, `decision`, `pitfall`, `convention`, `architectur
 - Do not store full conversations, large logs, complete diffs, or obvious code facts.
 - Store reusable project knowledge only: commands, decisions, conventions, pitfalls, and architecture notes.
 - Prefer concise summaries with area, kind, tags, source, and active status.
-- Proposed memory must be shown to the user before it becomes accepted memory.
-- Accepted memory can be active or inactive. Active memory is returned by default in context searches.
+- Propose memory entries via chat after close. Wait for user confirmation before running `memory add`.
+- Active memory is returned by default in context searches. Inactive memory requires `--include-inactive`.
 - Follow `.harness/BEST_PRACTICES.md` for area names, tags, memory quality, and search hygiene.
 
 ## Review Contract
