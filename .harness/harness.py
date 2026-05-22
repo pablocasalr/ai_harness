@@ -964,6 +964,15 @@ def command_close(args: argparse.Namespace) -> None:
     task = active_task(conn)
     if not spec or not task:
         sys.exit("No active spec/task.")
+
+    if args.register_hash:
+        commit_hash = args.register_hash.strip()
+        conn.execute("UPDATE specs SET commit_hash = ? WHERE id = ?", (commit_hash, spec["id"]))
+        conn.execute("UPDATE tasks SET commit_hash = ? WHERE id = ?", (commit_hash, task["id"]))
+        conn.commit()
+        print(f"Registered commit {commit_hash[:8]} for spec {spec['id']}.")
+        return
+
     if not args.force and spec["status"] != "locked":
         sys.exit("Spec is not locked. Use --force only if the user explicitly approved closing.")
     timestamp = now()
@@ -976,44 +985,16 @@ def command_close(args: argparse.Namespace) -> None:
         (args.outcome or "closed after user review", timestamp, task["id"]),
     )
     conn.commit()
-    print(f"Closed task {task['id']} and spec {spec['id']}.")
-    print("Propose memory entries via chat, then add accepted ones with: harness memory add ...")
 
-    if args.no_commit:
-        return
-    if not (ROOT / ".git").exists():
-        print("Not a git repository — skipping commit.")
-        return
     commit_type = args.type or _infer_commit_type(spec["title"])
     area = (spec["area"] or "").strip()
     scope_part = f"({area})" if area and area != "general" else ""
     commit_msg = f"{commit_type}{scope_part}: {spec['title']}"
-    subprocess.run(["git", "add", "-A"], cwd=ROOT, check=False, capture_output=True)
-    result = subprocess.run(
-        ["git", "commit", "-m", commit_msg],
-        cwd=ROOT, text=True, capture_output=True,
-    )
-    if result.returncode == 0:
-        hash_result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=ROOT, text=True, capture_output=True,
-        )
-        commit_hash = hash_result.stdout.strip() if hash_result.returncode == 0 else None
-        if commit_hash:
-            conn.execute(
-                "UPDATE specs SET commit_hash = ? WHERE id = ?",
-                (commit_hash, spec["id"]),
-            )
-            conn.execute(
-                "UPDATE tasks SET commit_hash = ? WHERE id = ?",
-                (commit_hash, task["id"]),
-            )
-            conn.commit()
-        print(f"Committed: {commit_msg}" + (f" ({commit_hash[:8]})" if commit_hash else ""))
-    else:
-        err = result.stderr.strip() or result.stdout.strip()
-        print(f"Git commit failed: {err}", file=sys.stderr)
-        print("Stage and commit manually.")
+
+    print(f"Closed task {task['id']} and spec {spec['id']}.")
+    print(f"suggested_commit: {commit_msg}")
+    print("Commit the changes, then run: harness close --register-hash <hash>")
+    print("Propose memory entries via chat, then add accepted ones with: harness memory add ...")
 
 
 def yes_no(value: str | bool | None) -> int:
@@ -1160,11 +1141,11 @@ def build_parser() -> argparse.ArgumentParser:
     mem_deprecate.set_defaults(func=command_memory_deprecate)
 
 
-    close = sub.add_parser("close", help="close active spec/task and commit with conventional commits")
+    close = sub.add_parser("close", help="close active spec/task and print suggested commit message")
     close.add_argument("--outcome")
     close.add_argument("--force", action="store_true")
     close.add_argument("--type", metavar="TYPE", help="override commit type (feat, fix, refactor, docs, test, chore)")
-    close.add_argument("--no-commit", action="store_true", help="skip git commit")
+    close.add_argument("--register-hash", metavar="HASH", help="register a commit hash against the closed spec/task")
     close.set_defaults(func=command_close)
 
     return parser

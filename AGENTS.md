@@ -41,10 +41,13 @@ This project uses `.harness/` as the workflow contract for Codex.
 10. If review still fails, stop and report what failed, what was tried, and options.
 11. After user approval, close the work:
     `python .harness/harness.py close`
-    This closes the spec/task and commits with conventional commits automatically.
-    Override type if needed: `python .harness/harness.py close --type fix`
-    Skip commit: `python .harness/harness.py close --no-commit`
-12. Propose any reusable memory entries via chat. After user confirms, add them:
+    This closes the spec/task in DB and prints a suggested commit message.
+12. Stage only the files you modified and commit using the suggested message:
+    `git add <file1> <file2> ...`
+    `git commit -m "feat(auth): add login"`
+13. Register the commit hash:
+    `python .harness/harness.py close --register-hash <hash>`
+14. Propose any reusable memory entries via chat. After user confirms, add them:
     `python .harness/harness.py memory add --kind decision --area AUTH --summary "..." --content "..."`
 
 ## Command Reference
