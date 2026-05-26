@@ -1,48 +1,92 @@
 # Harness Best Practices
 
-This file defines how Codex should maintain specs, tasks, memory, and searches so the harness remains useful as the project grows.
+This file defines how Codex should maintain specs, test plans, memory, and searches so the harness remains useful as the project grows.
 
 ## Spec Quality
 
-A spec should be short, explicit, and testable.
+A spec is created only after the user approves the contract in chat. It should be short, explicit, and testable.
 
 Good spec fields:
 
-- `goal`: the desired outcome in one or two sentences
+- `goal`: desired outcome in one or two sentences
 - `scope`: files, modules, workflows, or behaviors that may change
 - `out_of_scope`: related things that must not be touched
 - `acceptance_criteria`: observable conditions that must be true
-- `test_strategy`: exact test class/file/filter/command when known
-- `area`: stable area name such as `auth`, `billing`, `api`, `cli`, `database`, `frontend`, `infra`, `harness`
+- `test_strategy`: validation required by the contract
+- `area`: stable feature identifier such as `auth`, `projects_budget`, `task_notifications`, `users_filters`
 - `risk_level`: `low`, `medium`, or `high`
 
 Avoid:
 
 - vague acceptance such as "works correctly"
 - hidden scope expansion during implementation
-- spec changes after lock without explicit user approval
-- mixing several unrelated tasks into one spec
+- creating a spec before the user approves the contract
+- using broad area names when a concrete feature name is available
 
-## Task Discipline
+## Spec States
+
+Valid states:
+
+- `implementing`: approved spec is being worked on
+- `ready_for_review`: planned tests passed and Codex verified requirements; wait for user approval
+- `blocked`: Codex cannot continue without a user decision
+- `closed`: user-approved work is finished
+
+Do not use draft, locked, task, pending, in_progress, or done states.
+
+Use `review_cycles` for in-scope changes requested by the user during final review.
+
+## Implementation Discipline
 
 Before implementation:
 
 - Read the active spec.
 - Fetch context with `python .harness/harness.py context "short task query"`.
-- Start an attempt with `python .harness/harness.py task attempt`.
 
 During implementation:
 
 - Change only what is needed for the spec.
-- If the code reveals the spec is wrong, stop and ask to revise the spec.
-- If a behavior change has no test, add a relevant test before review.
+- If the code reveals the spec is wrong, stop and ask to redefine it.
 
 After implementation:
 
-- Run targeted tests first.
-- Run broader tests when the risk level is high or touched code is shared.
-- Run `python .harness/harness.py review`.
-- If review fails for code reasons, perform only one focused fix attempt.
+- Generate a post-implementation test plan with `python .harness/harness.py test plan`.
+- Add or update relevant tests if the plan requires it.
+- Run the planned targeted tests first.
+- Run broader tests when risk is high or touched code is shared.
+- If planned tests fail, keep working in `implementing` and fix the issue.
+- After tests pass, Codex must verify in chat that the approved requirements are satisfied, then run `python .harness/harness.py spec ready --reason "..."`.
+- If the user requests an in-scope change from `ready_for_review`, run `python .harness/harness.py spec revise --reason "..."`.
+
+## Test Planning
+
+`test_strategy` is the approved validation requirement. `test_plan` is the operative plan generated after implementation from the repository and current diff.
+
+A good test plan includes:
+
+- existing tests found by area, filename, class, group, or mark
+- changed files from the current implementation diff
+- testing memory related to the area
+- tests to update
+- tests to create
+- required commands
+- full/lint/build commands when useful
+- a coverage map from acceptance criteria to tests or planned tests
+
+Use `area` consistently so tests are discoverable. Prefer test names, groups, or marks that include the area.
+
+Examples:
+
+```php
+/**
+ * @group projects_budget
+ */
+```
+
+```python
+class TestProjectsBudget:
+    ...
+```
 
 ## Implementation Rules
 
@@ -79,38 +123,11 @@ CSS:
 - Comment each new or modified selector or selector group.
 - The comment should explain the role of the block, not list the properties.
 
-Good:
-
-```css
-/* Define el estado visual del boton principal del formulario. */
-.form-primary-button {
-  ...
-}
-```
-
-Bad:
-
-```css
-/* Color azul y padding. */
-.form-primary-button {
-  ...
-}
-```
-
 HTML/templates:
 
 - Comment new or modified components or meaningful structural blocks.
 - Prefer comments at component boundaries.
 - Do not comment every small tag.
-
-Good:
-
-```html
-<!-- Formulario principal de acceso del usuario. -->
-<form>
-  ...
-</form>
-```
 
 Review checks:
 
@@ -145,7 +162,7 @@ Do not store:
 
 ## Memory Proposal Rules
 
-At close, Codex should propose memory instead of writing it directly.
+At `ready_for_review`, Codex should propose memory instead of writing it directly.
 
 A good proposal has:
 
@@ -158,41 +175,26 @@ A good proposal has:
 - a source, usually the spec id
 - an active default
 
-Use active memory for:
-
-- current commands
-- current conventions
-- current decisions
-- high-confidence pitfalls
-
-Use inactive memory for:
-
-- historical acceptance criteria
-- low-confidence observations
-- rare edge cases
-- notes that may be useful but should not appear in default context
+Add accepted memory before `harness close` so the memory update can be committed with the same work.
 
 ## Area And Tag Hygiene
 
-Use stable, boring area names. Do not invent a new area for every task.
+Use stable, concrete area names. Do not invent a new area for every task.
 
 Prefer:
 
 - `auth`
-- `billing`
-- `api`
+- `projects_budget`
+- `task_notifications`
+- `users_filters`
 - `database`
-- `cli`
-- `frontend`
-- `infra`
-- `testing`
 - `harness`
 
 Tags should include likely future search words:
 
 ```text
 auth, login, validation, tests
-billing, webhook, retry, idempotency
+projects_budget, ajax, calculations, tests
 database, migration, seed, rollback
 ```
 
@@ -210,13 +212,7 @@ Good:
 
 ```powershell
 python .harness/harness.py context "auth login validation tests"
-python .harness/harness.py memory search "billing webhook idempotency"
-```
-
-Bad:
-
-```powershell
-python .harness/harness.py context "Here is the full user conversation..."
+python .harness/harness.py memory search "projects_budget ajax tests"
 ```
 
 If search results are poor:

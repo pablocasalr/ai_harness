@@ -4,10 +4,7 @@
     "language": "auto"
   },
   "workflow": {
-    "max_attempts": 2,
-    "require_locked_spec": true,
     "require_tests_before_ready": true,
-    "allow_spec_change_during_implementation": false,
     "stop_on_scope_violation": true,
     "stop_on_environment_failure": true
   },

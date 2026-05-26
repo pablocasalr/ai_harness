@@ -1,140 +1,169 @@
 # Codex Workflow Harness
 
-A lightweight workflow layer for AI-assisted development. Keeps Codex work structured — spec before code, tests before merge, memory that persists across sessions — without replacing the normal Codex UI.
+A lightweight workflow layer for AI-assisted development. It keeps Codex work structured around one approved spec, planned tests, Codex requirement checks, and reusable memory without replacing the normal Codex UI.
 
 **Requirements:** Python 3.9+, no external dependencies.
 
-## How it works
+## How It Works
 
-The harness is split into two separate command sets with different responsibilities:
+The harness has two command sets:
 
-### `harness-admin` — source repo only
+### `harness-admin` - source repo only
 
-Lives in this repo and is never copied to projects. Manages installations: installs the harness into other projects and upgrades them when the source changes.
+Lives in this repo and is never copied as the project workflow command. It installs or upgrades harness instances in other projects.
 
-### `harness` — installed in each project
+### `harness` - installed in each project
 
-Copied into `.harness/` inside each target project. Runs from within that project and always operates on that project's own database and config. Handles the full development workflow: specs, tasks, tests, review, memory.
-
-The two commands are independent by design. `harness-admin` knows about this source repo and the projects it manages. `harness` knows nothing about where it came from — it only knows about the project it lives in.
+Copied into `.harness/` inside each target project. It operates on that project's own SQLite database, config, logs, specs, test runs, and memory.
 
 ---
 
-## Setup (run once after cloning this repo)
+## Setup
+
+Run once after cloning this repo:
 
 ```powershell
 python harness-admin.py setup
 ```
 
-Adds `bin/` to your user PATH and initializes the local harness DB. Open a new terminal — both commands are then available globally.
+Then open a new terminal.
 
 ---
 
-## Admin commands (`harness-admin`)
+## Admin Commands
 
 ```powershell
 # install harness into a project
 harness-admin install --target C:\path\to\Project
 
-# upgrade harness files + run DB migrations in all installed projects
+# upgrade harness files + run DB migrations in installed projects
 harness-admin upgrade --scan C:\Users\you\Projects
-harness-admin upgrade --scan C:\path\one C:\path\two
 
 # upgrade current directory only
 harness-admin upgrade
 ```
 
-`install` copies only template files — never DB, logs, or project-specific config:
+`install` copies template files only:
 
 - `.harness/harness.py`
 - `.harness/config.yaml`
 - `.harness/BEST_PRACTICES.md`
-- `AGENTS.md` (appended if already exists)
-- `README.md` (copied as `README.harness.md` if a README already exists)
+- `AGENTS.md`
+- `README.md` or `README.harness.md`
 
-`upgrade` skips this source repo automatically and preserves each project's `config.yaml`.
+`upgrade` preserves each target project's `config.yaml`.
 
 ---
 
-## Project commands (`harness`)
+## Project Workflow
 
-Run from within any installed project. `harness` resolves to that project's `.harness/harness.py` automatically.
-
-### Workflow
+Run from inside an installed project:
 
 ```powershell
-# 1. Start a task — create new or activate an existing draft
-harness spec new "add email uniqueness validation"
-harness spec activate <spec_id>
+# 1. Codex and the user define the contract in chat.
 
-# 2. Refine spec fields, then lock after user approval
-harness spec set --goal "..." --acceptance "..." --tests "..."
-harness spec lock
+# 2. After user approval, create the spec directly in implementing state.
+harness spec create --title "add email uniqueness validation" --area auth --goal "..." --scope "..." --out-of-scope "..." --acceptance "..." --tests "..." --risk medium
 
-# 3. Get context before implementing
-harness context "email uniqueness validation"
+# 3. Gather context before implementing.
+harness context "auth email uniqueness validation"
 
-# 4. Implement
-harness task attempt
+# 4. Implement the scoped change.
 
-# 5. Test and review
+# 5. Generate the post-implementation test plan, update/add tests if needed, then run planned tests.
 harness test plan
 harness test run --targeted
-harness review
 
-# 6. Close — commits automatically with conventional commits
-harness close
-harness close --type fix        # override inferred commit type
-harness close --no-commit       # skip automatic commit
-```
+# 6. Codex verifies requirements in chat after tests pass, then marks ready.
+harness spec ready --reason "Codex verified the implementation against the approved requirements"
 
-### Specs
+# 7. If the user requests an in-scope review change, reopen it.
+harness spec revise --reason "adjust button label requested in review"
 
-A spec is the contract for a task. Codex must not implement until the spec is locked by the user.
-
-Fields: goal, scope, out of scope, acceptance criteria, test strategy, area, risk level.
-
-```powershell
-harness spec list [--status draft|locked|closed] [--area AREA]
-harness spec show
-harness spec set --goal "..." --scope "..." --acceptance "..." --tests "..."
-harness spec lock
-harness spec activate <id>      # resume a backlog draft without creating a new spec
-```
-
-### Tests
-
-All behavior changes require tests. If no relevant test exists, add one. If tests cannot be run, the task stops as blocked.
-
-```powershell
-harness test plan               # show which commands will run
-harness test run --targeted     # run and record result
-harness test run --full
-```
-
-### Memory
-
-Stored in `.harness/harness.db` (SQLite, not committed). Searched with FTS before each implementation to surface relevant decisions, pitfalls, and conventions.
-
-After closing a task, propose memory entries in chat. Add confirmed ones directly:
-
-```powershell
+# 8. After user approval, add accepted memory entries, close, then commit outside the harness.
 harness memory add --kind decision --area auth --summary "..." --content "..."
-harness memory search "auth login tests"
-harness memory list [--kind pitfall] [--area auth]
-harness context "billing webhook retry"   # active spec + relevant memory + test guidance
+harness close
+git add ...
+git commit -m "feat(auth): add email uniqueness validation"
 ```
 
-Good memory kinds: `command`, `decision`, `pitfall`, `convention`, `architecture`, `testing`.
+Valid spec states:
+
+- `implementing`
+- `ready_for_review`
+- `blocked`
+- `closed`
 
 ---
 
-## Implementation rules
+## Commands
 
-These apply to all projects with harness installed:
+```powershell
+# Specs
+harness spec create --title TEXT --area AREA --goal TEXT --scope TEXT --out-of-scope TEXT --acceptance TEXT --tests TEXT --risk low|medium|high
+harness spec list [--status implementing|ready_for_review|blocked|closed] [--area AREA]
+harness spec show [ID]
+harness spec revise [--reason TEXT]
+harness spec ready [--reason TEXT]
+harness spec block --reason TEXT
 
-- Do not implement until the spec is locked.
-- All files must be saved as UTF-8 without BOM.
-- Existing files must be edited in place, never deleted and recreated.
-- Code comments must be written in Spanish: functions, CSS selectors, HTML/template blocks.
-- Comments explain intent — never restate obvious syntax.
+# Context
+harness context "query" [--include-inactive]
+
+# Tests
+harness test plan
+harness test run [--targeted|--full] [--dry-run]
+
+# Close
+harness close [--outcome TEXT]
+
+# Memory
+harness memory add --kind KIND --area AREA --summary TEXT --content TEXT [--tags TAGS] [--active yes|no]
+harness memory search "query" [--include-inactive] [--limit N]
+harness memory list [--all] [--kind KIND] [--area AREA] [--status active|deprecated]
+harness memory set-active ID yes|no
+harness memory deprecate ID
+```
+
+Removed commands (`task`, `spec lock`, `spec set`, `spec activate`) fail with a clear message. The approved contract is created once with `spec create`.
+
+Use `spec ready` only after Codex has verified in chat that the implementation satisfies the approved requirements. Use `spec revise` when the user asks for an in-scope change during final review. Use `spec block` when Codex needs a user decision.
+
+---
+
+## Test Planning
+
+`test_strategy` is part of the approved spec. `test_plan` is generated after implementation and before tests run, so it can inspect the real diff and choose the right validation.
+
+`harness test plan` inspects:
+
+- `area`
+- changed files from the current diff
+- existing files under `tests/`
+- test names, groups, marks, and class names
+- testing memory related to the area
+
+It stores:
+
+- relevant existing tests
+- tests to update
+- tests to create
+- required commands
+- optional full/lint/build commands
+- acceptance criteria coverage map
+
+`harness test run` executes the commands declared in `test_plan`. If tests pass, Codex is responsible for reviewing whether the implementation satisfies the approved requirements before running `harness spec ready`.
+
+The harness source repo uses:
+
+```powershell
+python -m unittest discover -s tests
+```
+
+---
+
+## Memory
+
+Memory is stored in `.harness/harness.db` and should contain reusable project knowledge only: commands, decisions, pitfalls, conventions, architecture notes, and testing notes.
+
+Codex proposes memory entries in chat after `ready_for_review`. Add only user-approved entries before `harness close` so the memory update can be committed with the same work.
